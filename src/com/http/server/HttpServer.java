@@ -7,20 +7,28 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class HttpServer {
 
     private final int port; // Ќомер нашего порта
+    private final ExecutorService pool; // pool из пакета java.util.concurrent
+    private boolean stopped; // ‘лаг, отвечающий за то, чтобы наш сервер принимал за€вки
 
-    public HttpServer(int port) { // »нициализируем наш порт
+    public HttpServer(int port, int poolSize) { // »нициализируем наш порт и создаем заданной величины pool
         this.port = port;
+        pool = Executors.newFixedThreadPool(poolSize);
     }
 
     public void run() { // ћетод который будет запускать наш сервер
         try {
             ServerSocket server = new ServerSocket(port);
-            Socket socket = server.accept();
-            processSocket(socket); // ќбработаем наш запрос
+            while (!stopped) {
+                Socket socket = server.accept();
+                System.out.println("Socket accepted");
+                pool.submit(() -> processSocket(socket)); // ѕередаем пулу обработать наш запрос
+            }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -33,6 +41,7 @@ public class HttpServer {
             // step 1 handle request
             System.out.println("Request " + new String(inputStream.readNBytes(400)));
 
+            Thread.sleep(10000);
             // step 2 creating response
             byte[] body = Files.readAllBytes(Path.of("resources", "example.html"));
             String headers = String.format("""
@@ -43,10 +52,13 @@ public class HttpServer {
             outputStream.write(headers.getBytes());
             outputStream.write(System.lineSeparator().getBytes()); // ƒобавим пустую строку
             outputStream.write(body);
-        } catch (IOException e) {
+        } catch (IOException | InterruptedException e) {
             // TODO: 28.09.2022 log error message
             e.printStackTrace();
         }
+    }
 
+    public void setStopped(boolean stopped) { // ћетод, который будет останавливать наш сервер
+        this.stopped = stopped;
     }
 }
